@@ -1,0 +1,68 @@
+---
+ - hosts: main-machine
+   user: root
+   gather_facts: false
+   vars:
+    mqm_dir: /var/mqm
+   
+   tasks:
+    - name: add group mqm
+      group: name=mqm state=present
+
+    - name: add user mqm and add to group mqm
+      user: name=mqm group=mqm state=present
+
+    - name: create new directory
+      file:
+        path: "{{ mqm_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0775
+        recurse: yes
+
+    
+    - file:
+        path: /opt/temp
+        state: directory
+        owner: root
+        group: root
+        mode: 0775
+        recurse: yes
+
+     
+    - name: copy MQ installation file from source machine
+      copy:
+        src: /root/Karthik/{{ mq_file }}
+        dest: /opt/temp
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: extract the content of the file
+      action: shell tar -xvzf /opt/temp/{{ mq_file }}  --strip 1 -C /opt/temp
+   
+    - name: Fix ownership
+      file: state=directory path=/opt/temp owner=root group=root mode=0755 recurse=yes
+    
+    - name: accept license for mq
+      shell: /opt/temp/mqlicense.sh -accept chdir=/opt/temp    
+
+    - name: Check for MQ exists in /opt     
+      stat: 
+       path: /opt/mqm
+      register: p
+    
+    - name: Install RPM packages for first installation of MQ
+      command: rpm -ivh /opt/temp/*.rpm
+      when: not p.stat.exists
+
+    - name: Installing MQ as second installation 
+      command: /opt/temp/crtmqpkg {{ mqm_ver }} chdir=/opt/temp
+      when: p.stat.exists
+
+    - name: Installaing RPM packaes for second instance of MQ
+      shell: rpm --prefix /opt/{{ mqm_ver }} -ivh /var/tmp/mq_rpms/{{ mqm_ver }}/x86_64/*.rpm
+
+    - name: removing temporary directory after finishing installation
+      file:  path=/opt/temp state=absent 

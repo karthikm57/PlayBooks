@@ -1,0 +1,67 @@
+---
+ - hosts: target-machine
+   user: root
+   gather_facts: false
+   vars:
+    jdk_file: jdk-8u161-linux-i586.tar.gz
+    jdk_dir: /usr/java
+    java_dir: jdk1.8
+    path_dir: /etc/profile.d
+   
+   tasks:
+    - name: create new directory
+      file:
+        path: "{{ jdk_dir }}/{{ java_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0775
+        recurse: yes
+     
+    - name: copy java installation file from source machine
+      copy:
+        src: /root/Karthik/jdk-8u161-linux-i586.tar.gz
+        dest: "{{ jdk_dir }}/{{ java_dir }}/{{ jdk_file }}"
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: extract the content of the file
+      action: shell tar -xvzf "{{ jdk_dir }}/{{ java_dir }}/{{ jdk_file }}"  --strip 1 -C "{{ jdk_dir }}/{{ java_dir }}"
+
+    - name: Fix ownership
+      file: state=directory path="{{ jdk_dir }}/{{ java_dir }}" owner=root group=root mode=0755 recurse=yes
+   
+    - name: removing "{{ jdk_file }}" 
+      file:
+        path: "{{ jdk_dir }}/{{ java_dir }}/{{ jdk_file }}"
+        state: absent
+
+    - name: Make Java available for system by updating alternatives
+      file: >
+        src={{ jdk_dir }}/{{ java_dir }}/bin/java
+        dest=/usr/bin/java
+        state=link
+        force=yes
+    - file: >
+        src={{ jdk_dir }}/{{ java_dir }}
+        dest=/usr/java/latest
+        state=link
+        force=yes
+
+    - name: create oracle_sdk.sh and copy content 
+      file: 
+        path={{ path_dir }}/oracle_sdk.sh
+        state=touch
+        mode=0755
+    - stat: path={{ path_dir }}/oracle_sdk.sh
+      register: file_path
+    - copy:
+        content: | 
+                  #!/bin/bash
+                   export JDK_HOME={{ jdk_dir }}/{{ java_dir }}
+                   export JAVA_HOME={{ jdk_dir }}/{{ java_dir }}
+                   export JRE_HOME={{ jdk_dir }}/{{ java_dir }}/jre
+                   export PATH=$PATH:{{ jdk_dir }}/{{ java_dir }}/bin:{{ jdk_dir }}/{{ java_dir }}/jre/bin
+        dest: "{{ path_dir }}/oracle_sdk.sh"
+
